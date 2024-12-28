@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บันทึกรายรับรายจ่ายของเอนะม่อน</title>
+    <!-- เพิ่ม Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- เพิ่ม React -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- เพิ่ม Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        function ExpenseTracker() {
+            const [items, setItems] = React.useState(() => {
+                const savedItems = localStorage.getItem('transactions');
+                return savedItems ? JSON.parse(savedItems) : [];
+            });
+            const [description, setDescription] = React.useState('');
+            const [amount, setAmount] = React.useState('');
+            const [type, setType] = React.useState('expense');
+            const [editingItem, setEditingItem] = React.useState(null);
+            const [selectedMonth, setSelectedMonth] = React.useState(() => {
+                const today = new Date();
+                return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            });
+
+            React.useEffect(() => {
+                localStorage.setItem('transactions', JSON.stringify(items));
+            }, [items]);
+
+            const groupByMonth = () => {
+                const grouped = {};
+                items.forEach(item => {
+                    const date = new Date(item.date);
+                    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    if (!grouped[monthKey]) {
+                        grouped[monthKey] = [];
+                    }
+                    grouped[monthKey].push(item);
+                });
+                return grouped;
+            };
+
+            const calculateMonthlyTotals = (monthItems) => {
+                if (!monthItems) return { income: 0, expense: 0 };
+                return {
+                    income: monthItems
+                        .filter(item => item.type === 'income')
+                        .reduce((sum, item) => sum + item.amount, 0),
+                    expense: monthItems
+                        .filter(item => item.type === 'expense')
+                        .reduce((sum, item) => sum + item.amount, 0)
+                };
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (editingItem) {
+                    setItems(prevItems =>
+                        prevItems.map(item =>
+                            item.id === editingItem.id
+                                ? {
+                                    ...item,
+                                    description,
+                                    amount: parseFloat(amount),
+                                    type
+                                }
+                                : item
+                        )
+                    );
+                    setEditingItem(null);
+                } else {
+                    const newItem = {
+                        id: Date.now().toString(),
+                        description,
+                        amount: parseFloat(amount),
+                        type,
+                        date: new Date().toISOString()
+                    };
+                    setItems(prevItems => [...prevItems, newItem]);
+                }
+                setDescription('');
+                setAmount('');
+            };
+
+            const handleDelete = (id) => {
+                setItems(prevItems => prevItems.filter(item => item.id !== id));
+            };
+
+            const handleEdit = (item) => {
+                setEditingItem(item);
+                setDescription(item.description);
+                setAmount(item.amount.toString());
+                setType(item.type);
+            };
+
+            const groupedItems = groupByMonth();
+            const monthlyTotals = calculateMonthlyTotals(groupedItems[selectedMonth]);
+
+            return (
+                <div className="container mx-auto p-4">
+                    <h1 className="text-2xl font-bold mb-4 text-center">ระบบบันทึกรายรับรายจ่าย"ของม่อนเอง"</h1>
+                    
+                    <div className="mb-4">
+                        <select 
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            className="p-2 border rounded w-full"
+                        >
+                            {Object.keys(groupedItems)
+                                .sort((a, b) => b.localeCompare(a))
+                                .map(month => {
+                                    const [year, monthNum] = month.split('-');
+                                    const monthName = new Date(year, monthNum - 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+                                    return (
+                                        <option key={month} value={month}>
+                                            {monthName}
+                                        </option>
+                                    );
+                                })}
+                        </select>
+                    </div>
+
+                    <div className="mb-4 bg-white p-4 rounded-lg shadow">
+                        <p className="text-green-600">รายรับเดือนนี้: {monthlyTotals.income.toFixed(2)} บาท</p>
+                        <p className="text-red-600">รายจ่ายเดือนนี้: {monthlyTotals.expense.toFixed(2)} บาท</p>
+                        <p className="font-bold">คงเหลือเดือนนี้: {(monthlyTotals.income - monthlyTotals.expense).toFixed(2)} บาท</p>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="mb-4 bg-white p-4 rounded-lg shadow">
+                        <h2 className="text-lg font-semibold mb-2">
+                            {editingItem ? 'แก้ไขรายการ' : 'เพิ่มรายการใหม่'}
+                        </h2>
+                        <div className="flex flex-wrap gap-2">
+                            <select 
+                                value={type} 
+                                onChange={(e) => setType(e.target.value)}
+                                className="p-2 border rounded"
+                            >
+                                <option value="expense">รายจ่าย</option>
+                                <option value="income">รายรับ</option>
+                            </select>
+                            <input
+                                type="text"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                placeholder="รายละเอียด"
+                                className="p-2 border rounded flex-1"
+                                required
+                            />
+                            <input
+                                type="number"
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                placeholder="จำนวนเงิน"
+                                className="p-2 border rounded w-32"
+                                required
+                            />
+                            <button type="submit" className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">
+                                {editingItem ? 'บันทึกการแก้ไข' : 'เพิ่มรายการ'}
+                            </button>
+                            {editingItem && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setEditingItem(null);
+                                        setDescription('');
+                                        setAmount('');
+                                        setType('expense');
+                                    }}
+                                    className="bg-gray-500 text-white p-2 rounded hover:bg-gray-600"
+                                >
+                                    ยกเลิกการแก้ไข
+                                </button>
+                            )}
+                        </div>
+                    </form>
+
+                    <div className="bg-white rounded-lg shadow overflow-hidden">
+                        <table className="w-full border-collapse">
+                            <thead>
+                                <tr className="bg-gray-50">
+                                    <th className="border p-2">วันที่</th>
+                                    <th className="border p-2">ประเภท</th>
+                                    <th className="border p-2">รายละเอียด</th>
+                                    <th className="border p-2">จำนวนเงิน</th>
+                                    <th className="border p-2">การจัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(groupedItems[selectedMonth] || []).map(item => (
+                                    <tr key={item.id} className="hover:bg-gray-50">
+                                        <td className="border p-2">{new Date(item.date).toLocaleDateString('th-TH')}</td>
+                                        <td className="border p-2">{item.type === 'income' ? 'รายรับ' : 'รายจ่าย'}</td>
+                                        <td className="border p-2">{item.description}</td>
+                                        <td className={`border p-2 ${item.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                                            {item.amount.toFixed(2)}
+                                        </td>
+                                        <td className="border p-2">
+                                            <div className="flex gap-1">
+                                                <button 
+                                                    onClick={() => handleEdit(item)}
+                                                    className="bg-yellow-500 text-white p-1 rounded hover:bg-yellow-600"
+                                                >
+                                                    แก้ไข
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDelete(item.id)}
+                                                    className="bg-red-500 text-white p-1 rounded hover:bg-red-600"
+                                                >
+                                                    ลบ
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<ExpenseTracker />, document.getElementById('root'));
+    </script>
+</body>
+</html>
